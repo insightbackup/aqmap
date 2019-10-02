@@ -28,7 +28,7 @@ def get_pollutant_annual_df(year, pollutant, latitude, longitude):
     print('in get_pollutant_df func')
     newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
     query = """
-        SELECT distinct on ({1}_{0}_avg.month) {1}_{0}_avg.month, {1}_{0}_avg.avg
+        SELECT distinct on ({1}_{0}_avg.month) {1}_{0}_avg.month, {1}_{0}_avg.dataval as conc
         FROM
         {1}_{0}_avg
         ORDER BY
@@ -44,7 +44,7 @@ def get_temp_annual_df(year, latitude, longitude):
     print('in get temp function')
     newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
     query = """
-    SELECT distinct on (noaa_{0}_avg.month) noaa_{0}_avg.month as month, noaa_{0}_avg.avg/10 as tmax
+    SELECT distinct on (noaa_{0}_avg.month) noaa_{0}_avg.month as month, noaa_{0}_avg.dataval/10 as tmax
     FROM noaa_{0}_avg
     ORDER BY noaa_{0}_avg.month, noaa_{0}_avg.geogcol  <->
     ST_MakePoint({2},{1})::geography ;
@@ -57,7 +57,7 @@ def get_temp_annual_df(year, latitude, longitude):
 def get_temp_annual_avg_df(year, latitude, longitude, n_neighbors): 
     newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
     query = """
-    SELECT AVG(avg)/10 as tmax, ST_X(geogcol::geometry), ST_Y(geogcol::geometry)
+    SELECT AVG(dataval)/10 as tmax, ST_X(geogcol::geometry), ST_Y(geogcol::geometry)
     FROM noaa_{0}_avg GROUP BY noaa_{0}_avg.geogcol 
     ORDER BY noaa_{0}_avg.geogcol <-> ST_MakePoint({2},{1})::geography 
     LIMIT {3} ;
@@ -71,7 +71,7 @@ def get_temp_annual_avg_df(year, latitude, longitude, n_neighbors):
 def get_pollutant_annual_avg_df(year, pollutant, latitude, longitude, n_neighbors): 
     newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
     query = """
-    SELECT AVG(avg), ST_X(geogcol::geometry), ST_Y(geogcol::geometry)
+    SELECT AVG(dataval) as conc, ST_X(geogcol::geometry), ST_Y(geogcol::geometry)
     FROM {1}_{0}_avg GROUP BY {1}_{0}_avg.geogcol 
     ORDER BY {1}_{0}_avg.geogcol <-> ST_MakePoint({3},{2})::geography 
     LIMIT {4} ;
@@ -80,6 +80,7 @@ def get_pollutant_annual_avg_df(year, pollutant, latitude, longitude, n_neighbor
     newConnection.close()
     return avg_df
 
+# make a scatter plot with month on the x axis and concentration/temp on the y axis 
 def make_scatter(df, marker_color, xlabel, ylabel, plot_title, xname, yname): 
     ticknums = [1,2,3,4,5,6,7,8,9,10,11,12]
     tickmonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -98,45 +99,42 @@ def make_scatter(df, marker_color, xlabel, ylabel, plot_title, xname, yname):
     fig.update_layout(xaxis = go.layout.XAxis(tickmode = 'array', tickvals = ticknums, ticktext = tickmonths, title = xlabel), yaxis = go.layout.YAxis(title = ylabel), title=go.layout.Title(text=plot_title), hovermode='closest')
     return fig
 
-def make_geo(df, chart_title, lonname, latname, textname, user_lon, user_lat):
+# make a Mapbox scatter plot based on (lat, long, value)
+def make_geo_mapbox(df, chart_title, lonname, latname, textname, user_lon, user_lat):
     fig = go.Figure()
     # add database points
     fig.add_trace(
-        go.Scattergeo(
+        go.Scattermapbox(
                lon = df[lonname],
                lat = df[latname],
                text = df[textname],
                name = '',
                showlegend = False,
                mode='markers',
-               marker = dict(
+               marker = go.scattermapbox.Marker(
                    color = df[textname],
                    size = 12,
-                   line = dict(
-                        width = 1,
-                        color = 'gray'
-                       ),
                    showscale = True,
                    #colorscale = 'Parula',
                    autocolorscale = False,
                    symbol = 'circle',
-                   colorbar_title = '' 
+                   colorbar_title = ''
                 )
         )
     )
-    # add user point 
+        # add user point
     fig.add_trace(
-        go.Scattergeo(
+        go.Scattermapbox(
                lon = [user_lon],
                lat = [user_lat],
                text = ['Input Address'],
                name = '',
                showlegend = False,
                mode='markers',
-               marker = dict(
+               marker = go.scattermapbox.Marker(
                         showscale = False,
-                        color = 'black',
-                        size = 14,
+                        color = 'rgb(237, 186, 19)',
+                        size = 13,
                         symbol = 'star',
                         colorbar_title = ''
                    )
@@ -147,16 +145,10 @@ def make_geo(df, chart_title, lonname, latname, textname, user_lon, user_lat):
     max_lat = df[latname].max()+margin
     min_lon = df[lonname].min()-margin
     max_lon = df[lonname].max()+margin
-    fig.update_layout(title=go.layout.Title(text=chart_title), hovermode='closest', geo = dict(
-       scope = 'usa',
-       showland = True,
-       showrivers = True,
-       showlakes = True,
-       showocean = True,
-       showcoastlines = True,
-       center = dict(lon = user_lon, lat = user_lat),
-       lonaxis = dict(range = [min_lon, max_lon]),
-       lataxis = dict(range = [min_lat, max_lat]),
+    fig.update_layout(title=go.layout.Title(text=chart_title), hovermode='closest', mapbox = dict(
+       accesstoken='pk.eyJ1Ijoia3J1ZWcyMnIiLCJhIjoiY2sxOXJ6YnluMDBxeDNjbjJtb21jaTJ0YyJ9.pEM2ka8iLwmbh8mtMdePyQ',
+       center = go.layout.mapbox.Center(lon = user_lon, lat = user_lat),
+       zoom=7
     )
     )
     return fig
@@ -282,17 +274,17 @@ def make_main_figure(year, address):
     print('got temp df')
 
     # making the ozone geo plots
-    ozonefig = make_scatter(ozone_df, 'slateblue', 'Month', 'Concentration (ppm)', 'Ozone', 'month', 'avg')
-    ozonegeo = make_geo(ozone_geo_df, 'Mean Annual Ozone', 'st_x', 'st_y', 'avg', user_lon, user_lat)
+    ozonefig = make_scatter(ozone_df, 'slateblue', 'Month', 'Concentration (ppm)', 'Ozone', 'month', 'conc')
+    ozonegeo = make_geo_mapbox(ozone_geo_df, 'Mean Annual Ozone', 'st_x', 'st_y', 'conc', user_lon, user_lat)
     # making the pm2.5 plots 
-    pm25fig = make_scatter(pm25_df, 'seagreen', 'Month', 'Concentration (μg/m^3)', 'PM2.5','month','avg')
-    pm25geo = make_geo(pm25_geo_df, 'Mean Annual PM2.5', 'st_x', 'st_y', 'avg', user_lon, user_lat)
+    pm25fig = make_scatter(pm25_df, 'seagreen', 'Month', 'Concentration (μg/m^3)', 'PM2.5','month','conc')
+    pm25geo = make_geo_mapbox(pm25_geo_df, 'Mean Annual PM2.5', 'st_x', 'st_y', 'conc', user_lon, user_lat)
     # making the no2 plots
-    no2fig = make_scatter(no2_df, 'goldenrod', 'Month', 'Concentration (ppb)', 'Nitrogen Dioxide','month','avg')
-    no2geo = make_geo(no2_geo_df, 'Mean Annual Nitrogen Dioxide', 'st_x', 'st_y', 'avg', user_lon, user_lat)
+    no2fig = make_scatter(no2_df, 'goldenrod', 'Month', 'Concentration (ppb)', 'Nitrogen Dioxide','month','conc')
+    no2geo = make_geo_mapbox(no2_geo_df, 'Mean Annual Nitrogen Dioxide', 'st_x', 'st_y', 'conc', user_lon, user_lat)
     # making the temp plots 
     tempfig = make_scatter(temp_df, 'tomato', 'Month', '˚C', 'Maximum Temperature', 'month', 'tmax')
-    tempgeo = make_geo(temp_geo_df, 'Mean Annual Temperature', 'st_x', 'st_y', 'tmax', user_lon, user_lat)
+    tempgeo = make_geo_mapbox(temp_geo_df, 'Mean Annual Temperature', 'st_x', 'st_y', 'tmax', user_lon, user_lat)
 
     return tempfig, tempgeo, ozonefig, ozonegeo, pm25fig, pm25geo, no2fig, no2geo
 
