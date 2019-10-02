@@ -15,6 +15,8 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
+ADDRESS_CACHE = {}
+
 # what data is available? 
 years_available = list()
 for year in range(2000, 2019): 
@@ -162,6 +164,12 @@ def make_geo(df, chart_title, lonname, latname, textname, user_lon, user_lat):
 
 app.layout = html.Div([
     html.Div([
+        # the header 
+        html.H1(
+            '''
+            AQMap: Explore Your Atmosphere
+            '''
+        ),
         # a text input box for address 
         html.Div(
             [dcc.Input(
@@ -180,38 +188,55 @@ app.layout = html.Div([
             )]
         ),
         # the month-temperature scatter plot 
-        html.Div( 
-            [dcc.Graph(id='temp-graph')]
-        ),
-        # the temperature geo plot 
-        html.Div( 
-            [dcc.Graph(id='temp-geo-scatter')]
-        ),
-        # the ozone-temperature scatter plot 
-        html.Div(
-            [dcc.Graph(id='ozone-graph')],
-        ),
-        # the ozone annual geographic scatter plot 
-        html.Div(
-            [dcc.Graph(id='ozone-geo-scatter')],
-        ),
-        # the pm 2.5 scatter plot 
-        html.Div(
-            [dcc.Graph(id='pm25-graph')],
-        ),
-        # the pm 2.5 geo plot 
-        html.Div(
-            [dcc.Graph(id='pm25-geo-scatter')],
-        ),
-        # the no2 scatter plot 
-        html.Div(
-            [dcc.Graph(id='no2-graph')],
-        ),
-        # the no2 geo plot 
-        html.Div(
-            [dcc.Graph(id='no2-geo-scatter')],
-        ),
-            ],
+        html.Div([
+            html.Div( 
+                [dcc.Graph(id='temp-graph')],
+                className = 'six columns'
+
+            ),
+            # the temperature geo plot 
+            html.Div( 
+                [dcc.Graph(id='temp-geo-scatter')],
+                className = 'six columns'
+            ),
+        ], className = "row"),
+        html.Div([
+        # the ozone scatter plot 
+            html.Div(
+                [dcc.Graph(id='ozone-graph')],
+                className = 'six columns'
+            ),
+            # the ozone annual geographic scatter plot 
+            html.Div(
+                [dcc.Graph(id='ozone-geo-scatter')],
+                className = 'six columns'
+            ),
+        ], className = "row"),
+        html.Div([
+            # the pm 2.5 scatter plot 
+            html.Div(
+                [dcc.Graph(id='pm25-graph')],
+                className = 'six columns'
+            ),
+            # the pm 2.5 geo plot 
+            html.Div(
+                [dcc.Graph(id='pm25-geo-scatter')],
+                className = 'six columns'
+            ),
+        ], className = "row"),
+        html.Div([
+            # the no2 scatter plot 
+            html.Div(
+                [dcc.Graph(id='no2-graph')],
+                className = 'six columns'
+            ),
+            # the no2 geo plot 
+            html.Div(
+                [dcc.Graph(id='no2-geo-scatter')],
+                className = 'six columns'
+            ),
+        ], className = "row"),
+        ],
         ),
     ],
     id="mainContainer",
@@ -220,27 +245,28 @@ app.layout = html.Div([
 user_lat = 0
 user_lon = 0
 
-# update fig on year/temp selection 
+# update figs on year/temp selection 
 
 @app.callback(
     [Output('temp-graph', 'figure'),Output('temp-geo-scatter', 'figure'),Output('ozone-graph', 'figure'), Output('ozone-geo-scatter', 'figure'), Output('pm25-graph', 'figure'), Output('pm25-geo-scatter', 'figure'), Output('no2-graph', 'figure'), Output('no2-geo-scatter', 'figure')],
     [Input('yaxis-column', 'value'), Input('address-input', 'value')])
 
 def make_main_figure(year, address): 
+
     if year is None:
         raise PreventUpdate
     if address is None: 
         raise PreventUpdate
 
     # process address input by user, get latitude and longitude 
-    print('user address was '+address)
-    api_key = '32d83f5a52324a0895dada1099b0f2a5'
-    geolocator = OpenCage(api_key, domain='api.opencagedata.com', scheme=None, user_agent='AQMap', format_string=None, timeout=4)
-    location = geolocator.geocode(address)
-
+    if address not in ADDRESS_CACHE:
+        print('new address, making call to geolocator')
+        api_key = '32d83f5a52324a0895dada1099b0f2a5'
+        geolocator = OpenCage(api_key, domain='api.opencagedata.com', scheme=None, user_agent='AQMap', format_string=None, timeout=4)
+        ADDRESS_CACHE[address] = geolocator.geocode(address)
+    location = ADDRESS_CACHE[address]
     user_lat = location.latitude
     user_lon = location.longitude
-
     # get  necessary dataframes from database 
     ozone_df = get_pollutant_annual_df(year, 'ozone', location.latitude, location.longitude)
     ozone_geo_df = get_pollutant_annual_avg_df(year, 'ozone', location.latitude, location.longitude, 10) 
