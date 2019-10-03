@@ -1,30 +1,39 @@
-# AQMap: Finding Safe Air
+# AQMap: Exploring Your Atmosphere
 
 ## Introduction
-Finding current air quality is easy, but what is the air 
-quality in your neighborhood like over the course of the 
-year? Which pollutants contribute most? Are you close to 
-freeways where cars release pollutants that aren't even 
-tracked? Find out with AQMap. 
+Pollution causes tens of thousands of deaths in the United States
+each year. If you're choosing a new place to live, air quality 
+should be on your list of considerations. Finding the air quality 
+for today is easy, but what is it like year-round? AQMap provides 
+an online dashboard to explore the best EPA air quality monitoring 
+data available for any address in the US. 
 
 ## Data Sets
-The EPA air quality dataset from US monitors 1980-present
-will be used, along with highway data from OpenStreetMap. 
+The [EPA Air Quality dataset](https://www.epa.gov/outdoor-air-quality-data) for 
+three important pollutants has been used, along with complementary temperature 
+information from the [NOAA Global Historical Climatology Network](https://docs.opendata.aws/noaa-ghcn-pds/readme.html).
 
-## Engineering Challenges
-This project requires joining two unrelated data sources
-and performing fast batch computations on ~250 GB of data.
+## Data Pipeline 
 
-## Business Value
-City planners or developers can use the data to choose healthy
-locations for development, and individuals can pick accomodations 
-in healthier areas. 
+### Raw Data Storage
+Both datasets were available for download in csv format. Yearly summary files 
+for each pollutant are approximately 100 MB in size, and yearly weather data
+files are approximately 1.2 GB in size. Data were initially stored in AWS S3 
+buckets. 
 
-## Presentation 
+### Data Cleaning and Processing 
+Files were initially loaded from S3 using Spark. SparkSQL commands were used to 
+select the desired columns, remove data that was flagged as poor-quality, 
+perform monthly and averaging, and join
+NOAA station data to the main observation table based on station ID. 
 
-The user can select a location and a five-year date range. 
-Line plots show pollutant concentrations and air quality over
-the course of the year, averaged over the five-year period. 
-Points on a map mark freeways near the selected location. 
-The mean numbers of days where pollutants exceeded the EPA maximum 
-concentrations are highlighted in boxes. 
+### Geographical Queries 
+Processed data was stored in a PostGIS database, allowing selection of geographic
+nearest neighbors using the efficient k-nearest-neighbors algorithm. Entries were
+indexed based on their longitude and latitude, stored in a geography column, 
+leading to a 10x speedup for queries grouped by locaton. 
+
+### Presentation
+The PostGIS database can be interactively queried from the online dashboard, which 
+was built using Dash. 
+
