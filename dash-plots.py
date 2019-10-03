@@ -9,76 +9,23 @@ from geopy.geocoders import OpenCage
 import pandas as pd
 import plotly.graph_objs as go
 
-from databaseConnection import get_connection_by_config
+from geocode_access import get_geocode_keys
+import query_dataframes as qd 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
+# get API keys for OpenCage and MapBox
+opencage_key, mapbox_key = get_geocode_keys('geocode.ini', 'geocode_keys')
+
+# initialize cache for user addresses 
 ADDRESS_CACHE = {}
 
 # what data is available? 
 years_available = list()
 for year in range(2000, 2019): 
     years_available.append(str(year))
-
-
-# return a dataframe with monthly averages for a chosen pollutant for the specified geolocation
-def get_pollutant_annual_df(year, pollutant, latitude, longitude):
-    print('in get_pollutant_df func')
-    newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
-    query = """
-        SELECT distinct on ({1}_{0}_avg.month) {1}_{0}_avg.month, {1}_{0}_avg.dataval as conc
-        FROM
-        {1}_{0}_avg
-        ORDER BY
-        {1}_{0}_avg.month, {1}_{0}_avg.geogcol <->
-        ST_MakePoint({3},{2})::geography ;
-        """.format(year, pollutant, latitude, longitude)
-    pollutant_year_df = pd.read_sql(query, newConnection)
-    newConnection.close()
-    return pollutant_year_df
-
-# return a dataframe with monthly averages for temperature for the specified geolocation
-def get_temp_annual_df(year, latitude, longitude): 
-    print('in get temp function')
-    newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
-    query = """
-    SELECT distinct on (noaa_{0}_avg.month) noaa_{0}_avg.month as month, noaa_{0}_avg.dataval/10 as tmax
-    FROM noaa_{0}_avg
-    ORDER BY noaa_{0}_avg.month, noaa_{0}_avg.geogcol  <->
-    ST_MakePoint({2},{1})::geography ;
-    """.format(year, latitude, longitude)
-    temp_year_df = pd.read_sql(query, newConnection)
-    newConnection.close()
-    return temp_year_df
-
-# return a dataframe with annual average temperatures
-def get_temp_annual_avg_df(year, latitude, longitude, n_neighbors): 
-    newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
-    query = """
-    SELECT AVG(dataval)/10 as tmax, ST_X(geogcol::geometry), ST_Y(geogcol::geometry)
-    FROM noaa_{0}_avg GROUP BY noaa_{0}_avg.geogcol 
-    ORDER BY noaa_{0}_avg.geogcol <-> ST_MakePoint({2},{1})::geography 
-    LIMIT {3} ;
-    """.format(year, latitude, longitude, n_neighbors)
-    avg_df = pd.read_sql(query, newConnection)
-    newConnection.close()
-    return avg_df
-
-# return a dataframe with annual averages for a pollutant at n_neighbors 
-# nearest neigbors of the latitude and longitude given 
-def get_pollutant_annual_avg_df(year, pollutant, latitude, longitude, n_neighbors): 
-    newConnection = get_connection_by_config('database.ini', 'postgresql_conn_data')
-    query = """
-    SELECT AVG(dataval) as conc, ST_X(geogcol::geometry), ST_Y(geogcol::geometry)
-    FROM {1}_{0}_avg GROUP BY {1}_{0}_avg.geogcol 
-    ORDER BY {1}_{0}_avg.geogcol <-> ST_MakePoint({3},{2})::geography 
-    LIMIT {4} ;
-    """.format(year, pollutant, latitude, longitude, n_neighbors)
-    avg_df = pd.read_sql(query, newConnection)
-    newConnection.close()
-    return avg_df
 
 # make a scatter plot with month on the x axis and concentration/temp on the y axis 
 def make_scatter(df, marker_color, xlabel, ylabel, plot_title, xname, yname): 
@@ -133,27 +80,22 @@ def make_geo_mapbox(df, chart_title, lonname, latname, textname, user_lon, user_
                mode='markers',
                marker = go.scattermapbox.Marker(
                         showscale = False,
-                        color = 'rgb(237, 186, 19)',
+                        # color is only available for circle markers
                         size = 13,
                         symbol = 'star',
                         colorbar_title = ''
                    )
         )
     )
-    margin = 0.1
-    min_lat = df[latname].min()-margin
-    max_lat = df[latname].max()+margin
-    min_lon = df[lonname].min()-margin
-    max_lon = df[lonname].max()+margin
     fig.update_layout(title=go.layout.Title(text=chart_title), hovermode='closest', mapbox = dict(
-       accesstoken='pk.eyJ1Ijoia3J1ZWcyMnIiLCJhIjoiY2sxOXJ6YnluMDBxeDNjbjJtb21jaTJ0YyJ9.pEM2ka8iLwmbh8mtMdePyQ',
+       accesstoken=mapbox_key,
        center = go.layout.mapbox.Center(lon = user_lon, lat = user_lat),
        zoom=7
-    )
+        )
     )
     return fig
 
-
+# set layout for webpage here. Must include all elements 
 app.layout = html.Div([
     html.Div([
         # the header 
@@ -253,24 +195,24 @@ def make_main_figure(year, address):
     # process address input by user, get latitude and longitude 
     if address not in ADDRESS_CACHE:
         print('new address, making call to geolocator')
-        api_key = '32d83f5a52324a0895dada1099b0f2a5'
+        api_key = opencage_key
         geolocator = OpenCage(api_key, domain='api.opencagedata.com', scheme=None, user_agent='AQMap', format_string=None, timeout=4)
         ADDRESS_CACHE[address] = geolocator.geocode(address)
     location = ADDRESS_CACHE[address]
     user_lat = location.latitude
     user_lon = location.longitude
-    # get  necessary dataframes from database 
-    ozone_df = get_pollutant_annual_df(year, 'ozone', location.latitude, location.longitude)
-    ozone_geo_df = get_pollutant_annual_avg_df(year, 'ozone', location.latitude, location.longitude, 10) 
+    # get  necessary dataframes from PostGIS database 
+    ozone_df = qd.get_pollutant_annual_df(year, 'ozone', location.latitude, location.longitude)
+    ozone_geo_df = qd.get_pollutant_annual_avg_df(year, 'ozone', location.latitude, location.longitude, 10) 
     print('got ozone df')
-    pm25_df = get_pollutant_annual_df(year, 'pm25', location.latitude, location.longitude)
-    pm25_geo_df = get_pollutant_annual_avg_df(year, 'pm25', location.latitude, location.longitude, 10)
+    pm25_df = qd.get_pollutant_annual_df(year, 'pm25', location.latitude, location.longitude)
+    pm25_geo_df = qd.get_pollutant_annual_avg_df(year, 'pm25', location.latitude, location.longitude, 10)
     print('got pm25 df')
-    no2_df = get_pollutant_annual_df(year, 'no2', location.latitude, location.longitude)
-    no2_geo_df = get_pollutant_annual_avg_df(year, 'no2', location.latitude, location.longitude, 10)
+    no2_df = qd.get_pollutant_annual_df(year, 'no2', location.latitude, location.longitude)
+    no2_geo_df = qd.get_pollutant_annual_avg_df(year, 'no2', location.latitude, location.longitude, 10)
     print('got no2 df')
-    temp_df = get_temp_annual_df(year, location.latitude, location.longitude)
-    temp_geo_df = get_temp_annual_avg_df(year, location.latitude, location.longitude, 10)
+    temp_df = qd.get_temp_annual_df(year, location.latitude, location.longitude)
+    temp_geo_df = qd.get_temp_annual_avg_df(year, location.latitude, location.longitude, 10)
     print('got temp df')
 
     # making the ozone geo plots
