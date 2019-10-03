@@ -15,6 +15,8 @@ information from the [NOAA Global Historical Climatology Network](https://docs.o
 
 ## Data Pipeline 
 
+![Tech Stack](https://github.com/krueg22r/aqmap/blob/master/tech_stack.png)
+
 ### Raw Data Storage
 Both datasets were available for download in csv format. Yearly summary files 
 for each pollutant are approximately 100 MB in size, and yearly weather data
