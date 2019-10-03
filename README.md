@@ -18,7 +18,7 @@ information from the [NOAA Global Historical Climatology Network](https://docs.o
 ![Tech Stack](https://github.com/krueg22r/aqmap/blob/master/tech_stack.png)
 
 ### Raw Data Storage
-Both datasets were available for download in csv format. Yearly summary files 
+Both data sets were available for download in csv format. Yearly summary files 
 for each pollutant are approximately 100 MB in size, and yearly weather data
 files are approximately 1.2 GB in size. Data were initially stored in AWS S3 
 buckets. 
@@ -33,9 +33,9 @@ NOAA station data to the main observation table based on station ID.
 Processed data was stored in a PostGIS database, allowing selection of geographic
 nearest neighbors using the efficient k-nearest-neighbors algorithm. Entries were
 indexed based on their longitude and latitude, stored in a geography column, 
-leading to a 10x speedup for queries grouped by locaton. 
+leading to a 10x speedup for queries grouped by location. 
 
 ### Presentation
-The PostGIS database can be interactively queried from the online dashboard, which 
+The Postage's database can be interactively queried from the online dashboard, which 
 was built using Dash. 
 
