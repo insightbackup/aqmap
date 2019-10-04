@@ -8,6 +8,8 @@ for today is easy, but what is it like year-round? AQMap provides
 an online dashboard to explore the best EPA air quality monitoring 
 data available for any address in the US. 
 
+Give it a spin at [cleardaydata.xyz](http://cleardaydata.xyz)
+
 ## Data Sets
 The [EPA Air Quality dataset](https://www.epa.gov/outdoor-air-quality-data) for 
 three important pollutants has been used, along with complementary temperature 
